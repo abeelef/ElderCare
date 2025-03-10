@@ -1,0 +1,41 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+package-lock.json
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Logs
+logs/
+*.log
+*.log.*
+log/
+
+# Entorns i configuració local (variables d'entorn, claus, etc.)
+.env
+.env.* 
+!.env.example  # Mantén un fitxer de mostra (opcional)
+
+# Compilació (si s'utilitza TypeScript o es generen build)
+dist/
+build/
+*.tsbuildinfo
+
+# Configuracions d'editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Sistema Operatiu
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
