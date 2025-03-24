@@ -50,7 +50,7 @@ app.get("/", (req, res) => {
 
 /**
  * @swagger
- * /users:
+ * /users_list:
  *   get:
  *     summary: Obtenir tots els usuaris
  *     tags: [Users]
@@ -58,7 +58,7 @@ app.get("/", (req, res) => {
  *       200:
  *         description: Retorna la llista de tots els usuaris
  */
-app.get("/users", async (req, res) => {
+app.get("/users_list", async (req, res) => {
   try {
     const snapshot = await db.collection("users").get();
     const users = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -68,6 +68,53 @@ app.get("/users", async (req, res) => {
     res.status(500).json({ error: "No s'han pogut obtenir els usuaris" });
   }
 });
+
+/**
+ * @swagger
+ * /add_user:
+ *   post:
+ *     summary: Crear un nou usuari
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Usuari creat correctament
+ *       500:
+ *         description: Error en crear l'usuari
+ */
+app.post("/add_user", async (req, res) => {
+    try {
+      // Agafem les dades del body
+      const { name, email } = req.body;
+  
+      // Si vols afegir més camps, els pots incloure també al JSON
+      const newUser = {
+        name,
+        email,
+        createdAt: new Date()
+      };
+  
+      // Afegim l'usuari a la col·lecció "users"
+      const docRef = await db.collection("users").add(newUser);
+  
+      // Retornem l'id generat i les dades
+      res.status(201).json({ id: docRef.id, ...newUser });
+    } catch (error) {
+      console.error("Error en crear l'usuari:", error);
+      res.status(500).json({ error: "No s'ha pogut crear l'usuari" });
+    }
+  });
+  
 
 // Configuració del port
 const PORT = process.env.PORT || 5000;
