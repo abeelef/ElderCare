@@ -2,21 +2,76 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const admin = require("./firebase");
+const db = admin.firestore();
+
+// Importem Swagger
+const swaggerUi = require("swagger-ui-express");
+const swaggerJsDoc = require("swagger-jsdoc");
 
 const app = express();
 
+// Configuració bàsica de Swagger
+const swaggerOptions = {
+  swaggerDefinition: {
+    openapi: "3.0.0",
+    info: {
+      title: "ElderCare API",
+      description: "Documentació de l'API REST d'ElderCare",
+      version: "1.0.0",
+    },
+    servers: [
+      {
+        url: "http://localhost:5000",
+        description: "Servidor local",
+      },
+    ],
+  },
+  // **paths**: indica on buscarem els comentaris de swagger. 
+  // Per exemple, si tens arxius .js en la carpeta 'routes', 
+  // pots posar ["routes/*.js"] o semblant. Aquí, per senzillesa, només server.js.
+  apis: ["server.js"],
+};
+
+const swaggerDocs = swaggerJsDoc(swaggerOptions);
+
 // Middleware
-app.use(express.json()); // Permet llegir JSON
-app.use(cors()); // Habilita CORS per a totes les peticions
-app.use(morgan("dev")); // Mostra logs a la consola
+app.use(express.json());
+app.use(cors());
+app.use(morgan("dev"));
+
+// Ruta per accedir a la documentació de Swagger
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // Ruta bàsica
 app.get("/", (req, res) => {
-    res.send("Benvingut a ElderCare API!");
+  res.send("Benvingut a ElderCare API!");
+});
+
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Obtenir tots els usuaris
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Retorna la llista de tots els usuaris
+ */
+app.get("/users", async (req, res) => {
+  try {
+    const snapshot = await db.collection("users").get();
+    const users = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error en obtenir usuaris:", error);
+    res.status(500).json({ error: "No s'han pogut obtenir els usuaris" });
+  }
 });
 
 // Configuració del port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Servidor escoltant a http://localhost:${PORT}`);
+  console.log(`Servidor escoltant a http://localhost:${PORT}`);
+  console.log(`Documentació de l'API disponible a http://localhost:${PORT}/api-docs`);
 });
