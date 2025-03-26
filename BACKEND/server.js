@@ -2,16 +2,20 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const admin = require("./firebase");
-const db = admin.firestore();
-
-// Importem Swagger
+const fileUpload = require("express-fileupload"); 
+app.use(fileUpload()); // <-- Per rebre fitxers multipart/form-data
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 
+const admin = require("./firebase"); // Arxiu on inicialitzes Firebase Admin
+const db = admin.firestore();
+
+// Preparem un "bucket" per a Firebase Storage
+const bucket = admin.storage().bucket(); 
+
 const app = express();
 
-// Configuració bàsica de Swagger
+/* -------------- SWAGGER -------------- */
 const swaggerOptions = {
   swaggerDefinition: {
     openapi: "3.0.0",
@@ -27,25 +31,100 @@ const swaggerOptions = {
       },
     ],
   },
-  // **paths**: indica on buscarem els comentaris de swagger. 
-  // Per exemple, si tens arxius .js en la carpeta 'routes', 
-  // pots posar ["routes/*.js"] o semblant. Aquí, per senzillesa, només server.js.
   apis: ["server.js"],
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Middleware
+/* -------------- MIDDLEWARE -------------- */
 app.use(express.json());
 app.use(cors());
 app.use(morgan("dev"));
-
-// Ruta per accedir a la documentació de Swagger
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+app.use(fileUpload()); // <-- Per rebre fitxers multipart/form-data
 
 // Ruta bàsica
 app.get("/", (req, res) => {
   res.send("Benvingut a ElderCare API!");
+});
+
+/**
+ * @swagger
+ * /upload_entorn:
+ *   post:
+ *     summary: Pujar un fitxer de l'entorn VR al servidor i desar-lo a Firebase
+ *     tags: [VR Environments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: El fitxer binari de l'entorn (ex. .pak, .zip)
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Fitxer pujat correctament
+ *       400:
+ *         description: Falta el fitxer
+ *       500:
+ *         description: Error en pujar el fitxer
+ */
+
+app.post("/upload_entorn", async (req, res) => {
+  try {
+    // 1) Comprovem que hi hagi un fitxer en la petició
+    if (!req.files || !req.files.file) {
+      return res.status(400).json({ error: "No s'ha rebut cap fitxer" });
+    }
+
+    // 2) Llegim les metadades (si s'envien)
+    const { name, description } = req.body;
+
+    // 3) Pugem el fitxer a Firebase Storage
+    const uploadedFile = req.files.file;
+    // Creem un nom de fitxer únic al bucket
+    const storageFileName = `unreal-envs/${Date.now()}_${uploadedFile.name}`;
+
+    // Desem el buffer de dades a Firebase Storage
+    await bucket.file(storageFileName).save(uploadedFile.data, {
+      metadata: {
+        contentType: uploadedFile.mimetype,
+      },
+    });
+
+    // 4) Opcionalment, generem un Signed URL per descarregar el fitxer
+    //    (Només si vols que sigui accessible públicament sense autenticar)
+    const fileRef = bucket.file(storageFileName);
+    const [downloadURL] = await fileRef.getSignedUrl({
+      action: "read",
+      expires: "03-09-2099", // Data de caducitat de l'URL
+    });
+
+    // 5) Guardem la informació a Firestore
+    const environmentData = {
+      name: name || "Entorn sense nom",
+      description: description || "",
+      storagePath: storageFileName, // Per si necessites la referència interna al bucket
+      downloadURL: downloadURL,     // Per descarregar l'arxiu
+      createdAt: new Date(),
+    };
+
+    const docRef = await db.collection("environments").add(environmentData);
+
+    // 6) Retornem una resposta amb la info guardada
+    res.status(201).json({ id: docRef.id, ...environmentData });
+  } catch (error) {
+    console.error("Error en pujar l'entorn VR:", error);
+    res.status(500).json({ error: "No s'ha pogut pujar l'entorn VR" });
+  }
 });
 
 /**
